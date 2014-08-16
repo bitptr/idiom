@@ -15,12 +15,18 @@
 
 enum src_pos {
 	TOP_BOX,
-	BOT_BOX,
-	BOX_CNT
+	BOT_BOX
+};
+
+enum which_clip {
+	NO_CLIPBOARD,
+	PRIMARY,
+	SECONDARY
 };
 
 struct state {
 	enum src_pos	 active;	/* Which box should be translated */
+	enum which_clip	 clipboard;
 	GtkTextBuffer	*top_buf;	/* The buffer with the top text */
 	GtkTextBuffer	*bot_buf;	/* The buffer with the bottom text */
 };
@@ -37,10 +43,17 @@ struct mem_buf {
 
 static void		top_but_cb(GtkButton *, gpointer);
 static void		bot_but_cb(GtkButton *, gpointer);
+static void		from_clip_cb(GtkWidget *, gpointer);
+static void		clip_received_cb(GtkClipboard *, const gchar *,
+    gpointer);
+
 static void		translate_box(struct state *);
 static size_t		accumulate_json(char *, size_t, size_t, void *);
+
 static struct mem_buf	mem_buf_new();
 static void		mem_buf_free(struct mem_buf);
+
+__dead void		usage();
 
 /*
  * idiom(1) is a GUI program for translating text from one language to another.
@@ -51,8 +64,25 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	struct state	 s;
+	enum which_clip	 from_clipboard;
+	int		 ch;
+
+	from_clipboard = NO_CLIPBOARD;
 
 	gtk_init(&argc, &argv);
+
+	while ((ch = getopt(argc, argv, "p")) != -1)
+		switch (ch) {
+		case 'p':
+			from_clipboard = PRIMARY;
+			break;
+		default:
+			usage();
+			/* NOTREACHED */
+			break;
+		}
+	argc -= optind;
+	argv += optind;
 
 	builder = gtk_builder_new_from_file(INTERFACE_PATH);
 	window = GTK_WIDGET(gtk_builder_get_object(builder, "window1"));
@@ -63,9 +93,11 @@ main(int argc, char *argv[])
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
+	s.clipboard = from_clipboard;
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+	g_signal_connect(window, "realize", G_CALLBACK(from_clip_cb), &s);
 	g_signal_connect(top_but, "clicked", G_CALLBACK(top_but_cb), &s);
 	g_signal_connect(bot_but, "clicked", G_CALLBACK(bot_but_cb), &s);
 
@@ -74,6 +106,48 @@ main(int argc, char *argv[])
 	gtk_main();
 
 	return 0;
+}
+
+/*
+ * Display a usage message and exit.
+ */
+void
+usage()
+{
+	fprintf(stderr, "usage: idiom [-p]\n");
+	exit(EX_USAGE);
+}
+
+/*
+ * Copy the clipboard into the top buffer then translate it.
+ */
+void
+from_clip_cb(GtkWidget *widget, gpointer user_data)
+{
+	GtkClipboard	*cb;
+	struct state	*s;
+
+	s = (struct state *)user_data;
+
+	if (s->clipboard == PRIMARY) {
+		cb = gtk_clipboard_get(GDK_SELECTION_PRIMARY);
+		gtk_clipboard_request_text(cb, clip_received_cb, user_data);
+	}
+}
+
+/*
+ * Set the top buffer's text then translate it.
+ */
+void
+clip_received_cb(GtkClipboard *clipboard, const gchar *text, gpointer data)
+{
+	struct state	*s;
+
+	s = (struct state *)data;
+	s->active = TOP_BOX;
+	gtk_text_buffer_set_text(s->top_buf, text, -1);
+
+	translate_box(s);
 }
 
 /*
