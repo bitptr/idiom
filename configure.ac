@@ -6,5 +6,5 @@ AC_PROG_CC
 PKG_CHECK_MODULES([CURL], [libcurl])
 PKG_CHECK_MODULES([JSON_GLIB], [json-glib-1.0])
 PKG_CHECK_MODULES([GTK], [gtk+-3.0])
-AC_CONFIG_FILES([Makefile src/Makefile share/idiom/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile share/idiom/Makefile man/Makefile])
 AC_OUTPUT

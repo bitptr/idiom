@@ -1,2 +1,2 @@
 AUTOMAKE_OPTIONS = foreign
-SUBDIRS= share/idiom src
+SUBDIRS= share/idiom src man

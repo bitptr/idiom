@@ -1,0 +1,54 @@
+.Dd August 17, 2014
+.Dt IDIOM 1
+.Os
+.Sh NAME
+.Nm idiom
+.Nd translate between languages using a GUI
+.Sh SYNOPSIS
+.Nm progname
+.Op Fl p
+.Sh DESCRIPTION
+The
+.Nm
+graphical utility translates between written languages.
+It is backed by Google Translate.
+It supports these options and arguments:
+.
+.Bl -tag
+.It Fl p
+Translate from the
+.Li PRIMARY
+clipboard.
+This option fills in the top text box with text from the
+.Li PRIMARY
+and fills in the bottom text box with its translation.
+.El
+.\" .Sh ENVIRONMENT
+.\" For sections 1, 6, 7, and 8 only.
+.\" .Sh FILES
+.Sh EXIT STATUS
+The
+.Nm
+utility exits 0 on succcess and >0 if an error occurs.
+.\" .Sh EXAMPLES
+.Sh DIAGNOSTICS
+An error message like:
+.Dl idiom: curl: [garbage]
+indicates that
+.Xr libcurl 3
+cannot find TLS certificates.
+This can happen with the
+.Li libcurl-4-nss-dev
+package on Debian.
+.Pp
+.\" .Sh SEE ALSO
+.\" .Xr foobar 1
+.\" .Sh STANDARDS
+.\" .Sh HISTORY
+.Sh AUTHORS
+.An -split
+.An "Mike Burns" Aq Mt mike@mike-burns.com
+.\" .Sh CAVEATS
+.Sh BUGS
+This can translate any language, so long as you only want to translate from
+Swedish to English.
