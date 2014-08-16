@@ -11,6 +11,7 @@
 #include <gtk/gtk.h>
 #include <json-glib/json-glib.h>
 
+#include "compat.h"
 #include "pathnames.h"
 
 enum src_pos {
