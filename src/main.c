@@ -13,21 +13,6 @@
 
 #include "pathnames.h"
 
-/*
- * NOTES:
- *
- * curl 'https://translate.google.com/translate_a/single?client=t&sl=sv&tl=en&hl=en&dt=bd&dt=ex&dt=ld&dt=md&dt=qc&dt=rw&dt=rm&dt=ss&dt=t&dt=at&dt=sw&ie=UTF-8&oe=UTF-8&oc=1&otf=2&ssel=4&tsel=0&q=hej%20d%C3%A5' -H 'User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12'
- *
- * Minimal:
- *
- * curl 'https://translate.google.com/translate_a/single?client=t&sl=sv&tl=en&dt=bd&dt=t&dt=at&q=hej%20d%C3%A5' -H 'User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12
- *
- * sl - source language - "sv"
- * tl - target language - "en"
- * q  - query           - "hej då"
- *
- */
-
 enum src_pos {
 	TOP_BOX,
 	BOT_BOX,
@@ -35,17 +20,19 @@ enum src_pos {
 };
 
 struct state {
-	enum src_pos	 active;
-	GtkTextView	*top_text;
-	GtkTextView	*bot_text;
+	enum src_pos	 active;	/* Which box should be translated */
+	GtkTextBuffer	*top_buf;	/* The buffer with the top text */
+	GtkTextBuffer	*bot_buf;	/* The buffer with the bottom text */
 };
 
+/* This is used to transfer data out of curl */
 struct mem_buf {
-	char	*mem;
-	size_t	 size;
+	char	*mem;	/* The actual string */
+	size_t	 size;	/* The size of the string */
 };
 
 #define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=sv&tl=en&dt=bd&dt=t&dt=at&q=%s"
+
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12"
 
 static void		top_but_cb(GtkButton *, gpointer);
@@ -53,8 +40,11 @@ static void		bot_but_cb(GtkButton *, gpointer);
 static void		translate_box(struct state *);
 static size_t		accumulate_json(char *, size_t, size_t, void *);
 static struct mem_buf	mem_buf_new();
-void			mem_buf_free(struct mem_buf);
+static void		mem_buf_free(struct mem_buf);
 
+/*
+ * idiom(1) is a GUI program for translating text from one language to another.
+ */
 int
 main(int argc, char *argv[])
 {
@@ -71,8 +61,8 @@ main(int argc, char *argv[])
 	top_but = GTK_WIDGET(gtk_builder_get_object(builder, "button1"));
 	bot_but = GTK_WIDGET(gtk_builder_get_object(builder, "button2"));
 
-	s.top_text = GTK_TEXT_VIEW(top_text);
-	s.bot_text = GTK_TEXT_VIEW(bot_text);
+	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
+	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -86,6 +76,12 @@ main(int argc, char *argv[])
 	return 0;
 }
 
+/*
+ * Translate the top box.
+ *
+ * This function exists to set the active box in the state then pass that onto
+ * the translator.
+ */
 static void
 top_but_cb(GtkButton *button, gpointer user_data)
 {
@@ -97,6 +93,12 @@ top_but_cb(GtkButton *button, gpointer user_data)
 	translate_box(s);
 }
 
+/*
+ * Translate the bottom box.
+ *
+ * This function exists to set the active box in the state then pass that onto
+ * the translator.
+ */
 static void
 bot_but_cb(GtkButton *button, gpointer user_data)
 {
@@ -108,10 +110,19 @@ bot_but_cb(GtkButton *button, gpointer user_data)
 	translate_box(s);
 }
 
+/*
+ * Translate the text into the other box.
+ *
+ * This function does too much:
+ *
+ * 1. Read the buffer from the active box.
+ * 2. Fetch a translation from the Internet.
+ * 3. Parse the JSON.
+ * 4. Set the buffer of the inactive box.
+ */
 static void
 translate_box(struct state *s)
 {
-	GtkTextView		*src_text, *dst_text;
 	GtkTextBuffer		*src_g_buf, *dst_g_buf;
 	GtkTextIter		src_start, src_end;
 	CURL			*handle;
@@ -126,32 +137,25 @@ translate_box(struct state *s)
 	JsonNode		*root;
 	const gchar		*value;
 
-	src_text = NULL;
-	dst_text = NULL;
+	headers = NULL;
 
 	/* get the string from the user */
 
 	switch (s->active) {
 	case TOP_BOX:
-		src_text = s->top_text;
-		dst_text = s->bot_text;
+		src_g_buf = s->top_buf;
+		dst_g_buf = s->bot_buf;
 		break;
 	case BOT_BOX:
-		src_text = s->bot_text;
-		dst_text = s->top_text;
+		src_g_buf = s->bot_buf;
+		dst_g_buf = s->top_buf;
 		break;
 	default:
 		errx(EX_SOFTWARE, "unknown src_pos");
 	}
 
-	headers = NULL;
-
-	src_g_buf = gtk_text_view_get_buffer(src_text);
-	dst_g_buf = gtk_text_view_get_buffer(dst_text);
-
 	gtk_text_buffer_get_start_iter(src_g_buf, &src_start);
 	gtk_text_buffer_get_end_iter(src_g_buf, &src_end);
-
 	src_buf = gtk_text_buffer_get_text(src_g_buf, &src_start, &src_end, 0);
 
 	result = mem_buf_new();
@@ -217,7 +221,10 @@ translate_box(struct state *s)
 	mem_buf_free(result);
 }
 
-size_t
+/*
+ * Add the response string from HTTP to the memory buffer.
+ */
+static size_t
 accumulate_json(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
 	size_t	len;
@@ -236,7 +243,11 @@ accumulate_json(char *ptr, size_t size, size_t nmemb, void *userdata)
 	return len;
 }
 
-struct mem_buf
+/*
+ * Build a new empty memory buffer: size zero, allocated space for a single
+ * char.
+ */
+static struct mem_buf
 mem_buf_new()
 {
 	struct mem_buf	m;
@@ -248,7 +259,10 @@ mem_buf_new()
 	return m;
 }
 
-void
+/*
+ * Free the memory buffer.
+ */
+static void
 mem_buf_free(struct mem_buf m)
 {
 	free(m.mem);
