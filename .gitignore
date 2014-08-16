@@ -1,4 +1,5 @@
 idiom
+!/share/*
 *core
 *.o
 *.swp
