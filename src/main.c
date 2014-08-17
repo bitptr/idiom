@@ -15,6 +15,7 @@
 #include "pathnames.h"
 
 enum src_pos {
+	NO_BOX,
 	TOP_BOX,
 	BOT_BOX
 };
@@ -30,6 +31,8 @@ struct state {
 	enum which_clip	 clipboard;
 	GtkTextBuffer	*top_buf;	/* The buffer with the top text */
 	GtkTextBuffer	*bot_buf;	/* The buffer with the bottom text */
+	const char	*top_lang;	/* The language up top */
+	const char	*bot_lang;	/* The language down bottom */
 };
 
 /* This is used to transfer data out of curl */
@@ -38,12 +41,14 @@ struct mem_buf {
 	size_t	 size;	/* The size of the string */
 };
 
-#define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=sv&tl=en&dt=bd&dt=t&dt=at&q=%s"
+#define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=%s&tl=%s&dt=bd&dt=t&dt=at&q=%s"
 
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12"
 
 static void		top_but_cb(GtkButton *, gpointer);
 static void		bot_but_cb(GtkButton *, gpointer);
+static void		top_combo_cb(GtkComboBox *, gpointer);
+static void		bot_combo_cb(GtkComboBox *, gpointer);
 static void		from_clip_cb(GtkWidget *, gpointer);
 static void		clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
@@ -64,6 +69,7 @@ main(int argc, char *argv[])
 {
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
+	GtkWidget	*top_combo, *bot_combo;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -91,16 +97,23 @@ main(int argc, char *argv[])
 	bot_text = GTK_WIDGET(gtk_builder_get_object(builder, "textview2"));
 	top_but = GTK_WIDGET(gtk_builder_get_object(builder, "button1"));
 	bot_but = GTK_WIDGET(gtk_builder_get_object(builder, "button2"));
+	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
+	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
+	s.top_lang = gtk_combo_box_get_active_id(GTK_COMBO_BOX(top_combo));
+	s.bot_lang = gtk_combo_box_get_active_id(GTK_COMBO_BOX(bot_combo));
 	s.clipboard = from_clipboard;
+	s.active = NO_BOX;
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 	g_signal_connect(window, "realize", G_CALLBACK(from_clip_cb), &s);
 	g_signal_connect(top_but, "clicked", G_CALLBACK(top_but_cb), &s);
 	g_signal_connect(bot_but, "clicked", G_CALLBACK(bot_but_cb), &s);
+	g_signal_connect(top_combo, "changed", G_CALLBACK(top_combo_cb), &s);
+	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
 
 	gtk_widget_show(window);
 
@@ -186,6 +199,34 @@ bot_but_cb(GtkButton *button, gpointer user_data)
 }
 
 /*
+ * Change the language up top, then re-translate.
+ */
+static void
+top_combo_cb(GtkComboBox *widget, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	s->top_lang = gtk_combo_box_get_active_id(widget);
+
+	translate_box(s);
+}
+
+/*
+ * Change the language below, then re-translate.
+ */
+static void
+bot_combo_cb(GtkComboBox *widget, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	s->bot_lang = gtk_combo_box_get_active_id(widget);
+
+	translate_box(s);
+}
+
+/*
  * Translate the text into the other box.
  *
  * This function does too much:
@@ -211,8 +252,11 @@ translate_box(struct state *s)
 	GError			*error;
 	JsonNode		*root;
 	const gchar		*value;
+	const char		*src_lang, *dst_lang;
 
 	headers = NULL;
+	parser = NULL;
+	src_buf = NULL;
 
 	/* get the string from the user */
 
@@ -220,10 +264,18 @@ translate_box(struct state *s)
 	case TOP_BOX:
 		src_g_buf = s->top_buf;
 		dst_g_buf = s->bot_buf;
+		src_lang = s->top_lang;
+		dst_lang = s->bot_lang;
 		break;
 	case BOT_BOX:
 		src_g_buf = s->bot_buf;
 		dst_g_buf = s->top_buf;
+		src_lang = s->bot_lang;
+		dst_lang = s->top_lang;
+		break;
+	case NO_BOX:
+		return;
+		/* NOTREACHED */
 		break;
 	default:
 		errx(EX_SOFTWARE, "unknown src_pos");
@@ -232,6 +284,9 @@ translate_box(struct state *s)
 	gtk_text_buffer_get_start_iter(src_g_buf, &src_start);
 	gtk_text_buffer_get_end_iter(src_g_buf, &src_end);
 	src_buf = gtk_text_buffer_get_text(src_g_buf, &src_start, &src_end, 0);
+
+	if (*src_buf == '\0')
+		return;
 
 	result = mem_buf_new();
 
@@ -247,7 +302,7 @@ translate_box(struct state *s)
 	len = strlen(TRANS_URL_FMT) -  2 + strlen(esc_buf) + 1;
 	if ((url = calloc(len, sizeof(char))) == NULL)
 		err(1, "calloc");
-	snprintf(url, len, TRANS_URL_FMT, esc_buf);
+	snprintf(url, len, TRANS_URL_FMT, src_lang, dst_lang, esc_buf);
 
 	if ((headers = curl_slist_append(headers, "User-Agent: "USER_AGENT)) == NULL)
 		errx(1, "curl_slist_append");
@@ -292,7 +347,8 @@ translate_box(struct state *s)
 	gtk_text_buffer_set_text(dst_g_buf, value, -1);
 
 	/* cleanup */
-	g_object_unref(parser);
+	if (parser != NULL)
+		g_object_unref(parser);
 	mem_buf_free(result);
 }
 
@@ -341,4 +397,6 @@ static void
 mem_buf_free(struct mem_buf m)
 {
 	free(m.mem);
+	m.mem = NULL;
+	m.size = 0;
 }
