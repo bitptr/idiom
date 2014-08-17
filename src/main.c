@@ -49,6 +49,7 @@ static void		top_but_cb(GtkButton *, gpointer);
 static void		bot_but_cb(GtkButton *, gpointer);
 static void		top_combo_cb(GtkComboBox *, gpointer);
 static void		bot_combo_cb(GtkComboBox *, gpointer);
+static void		clear_cb(GtkMenuItem *, gpointer);
 static void		from_clip_cb(GtkWidget *, gpointer);
 static void		clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
@@ -69,7 +70,7 @@ main(int argc, char *argv[])
 {
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
-	GtkWidget	*top_combo, *bot_combo;
+	GtkWidget	*top_combo, *bot_combo, *file_new;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -99,6 +100,7 @@ main(int argc, char *argv[])
 	bot_but = GTK_WIDGET(gtk_builder_get_object(builder, "button2"));
 	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
+	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
@@ -114,6 +116,7 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_but, "clicked", G_CALLBACK(bot_but_cb), &s);
 	g_signal_connect(top_combo, "changed", G_CALLBACK(top_combo_cb), &s);
 	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
+	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 
 	gtk_widget_show(window);
 
@@ -224,6 +227,19 @@ bot_combo_cb(GtkComboBox *widget, gpointer user_data)
 	s->bot_lang = gtk_combo_box_get_active_id(widget);
 
 	translate_box(s);
+}
+
+/*
+ * Clear the text buffers.
+ */
+static void
+clear_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	gtk_text_buffer_set_text(s->top_buf, "", 0);
+	gtk_text_buffer_set_text(s->bot_buf, "", 0);
 }
 
 /*
