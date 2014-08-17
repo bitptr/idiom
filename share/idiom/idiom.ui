@@ -170,8 +170,89 @@
                 <property name="can_focus">False</property>
                 <property name="active">1</property>
                 <items>
-                  <item id="en" translatable="no">English</item>
-                  <item id="sv" translatable="no">Svenska</item>
+
+                  <item id="af" translatable="yes">Afrikaans</item>
+                  <item id="sq" translatable="yes">Albanian</item>
+                  <item id="ar" translatable="yes">Arabic</item>
+                  <item id="hy" translatable="yes">Armenian</item>
+                  <item id="az" translatable="yes">Azerbaijani</item>
+                  <item id="eu" translatable="yes">Basque</item>
+                  <item id="be" translatable="yes">Belarusian</item>
+                  <item id="bn" translatable="yes">Bengali</item>
+                  <item id="bs" translatable="yes">Bosnian</item>
+                  <item id="bg" translatable="yes">Bulgarian</item>
+                  <item id="ca" translatable="yes">Catalan</item>
+                  <item id="ceb" translatable="yes">Cebuano</item>
+                  <item id="zh-CN" translatable="yes">Chinese (Simplified)</item>
+                  <item id="zh-TW" translatable="yes">Chinese (Traditional)</item>
+                  <item id="hr" translatable="yes">Croatian</item>
+                  <item id="cs" translatable="yes">Czech</item>
+                  <item id="da" translatable="yes">Danish</item>
+                  <item id="nl" translatable="yes">Dutch</item>
+                  <item id="en" translatable="yes">English</item>
+                  <item id="eo" translatable="yes">Esperanto</item>
+                  <item id="et" translatable="yes">Estonian</item>
+                  <item id="tl" translatable="yes">Filipino</item>
+                  <item id="fi" translatable="yes">Finnish</item>
+                  <item id="fr" translatable="yes">French</item>
+                  <item id="gl" translatable="yes">Galician</item>
+                  <item id="ka" translatable="yes">Georgian</item>
+                  <item id="de" translatable="yes">German</item>
+                  <item id="el" translatable="yes">Greek</item>
+                  <item id="gu" translatable="yes">Gujarati</item>
+                  <item id="ht" translatable="yes">Haitian Creole</item>
+                  <item id="ha" translatable="yes">Hausa</item>
+                  <item id="iw" translatable="yes">Hebrew</item>
+                  <item id="hi" translatable="yes">Hindi</item>
+                  <item id="hmn" translatable="yes">Hmong</item>
+                  <item id="hu" translatable="yes">Hungarian</item>
+                  <item id="is" translatable="yes">Icelandic</item>
+                  <item id="ig" translatable="yes">Igbo</item>
+                  <item id="id" translatable="yes">Indonesian</item>
+                  <item id="ga" translatable="yes">Irish</item>
+                  <item id="it" translatable="yes">Italian</item>
+                  <item id="ja" translatable="yes">Japanese</item>
+                  <item id="jw" translatable="yes">Javanese</item>
+                  <item id="kn" translatable="yes">Kannada</item>
+                  <item id="km" translatable="yes">Khmer</item>
+                  <item id="ko" translatable="yes">Korean</item>
+                  <item id="lo" translatable="yes">Lao</item>
+                  <item id="la" translatable="yes">Latin</item>
+                  <item id="lv" translatable="yes">Latvian</item>
+                  <item id="lt" translatable="yes">Lithuanian</item>
+                  <item id="mk" translatable="yes">Macedonian</item>
+                  <item id="ms" translatable="yes">Malay</item>
+                  <item id="mt" translatable="yes">Maltese</item>
+                  <item id="mi" translatable="yes">Maori</item>
+                  <item id="mr" translatable="yes">Marathi</item>
+                  <item id="mn" translatable="yes">Mongolian</item>
+                  <item id="ne" translatable="yes">Nepali</item>
+                  <item id="no" translatable="yes">Norwegian</item>
+                  <item id="fa" translatable="yes">Persian</item>
+                  <item id="pl" translatable="yes">Polish</item>
+                  <item id="pt" translatable="yes">Portuguese</item>
+                  <item id="pa" translatable="yes">Punjabi</item>
+                  <item id="ro" translatable="yes">Romanian</item>
+                  <item id="ru" translatable="yes">Russian</item>
+                  <item id="sr" translatable="yes">Serbian</item>
+                  <item id="sk" translatable="yes">Slovak</item>
+                  <item id="sl" translatable="yes">Slovenian</item>
+                  <item id="so" translatable="yes">Somali</item>
+                  <item id="es" translatable="yes">Spanish</item>
+                  <item id="sw" translatable="yes">Swahili</item>
+                  <item id="sv" translatable="yes">Swedish</item>
+                  <item id="ta" translatable="yes">Tamil</item>
+                  <item id="te" translatable="yes">Telugu</item>
+                  <item id="th" translatable="yes">Thai</item>
+                  <item id="tr" translatable="yes">Turkish</item>
+                  <item id="uk" translatable="yes">Ukrainian</item>
+                  <item id="ur" translatable="yes">Urdu</item>
+                  <item id="vi" translatable="yes">Vietnamese</item>
+                  <item id="cy" translatable="yes">Welsh</item>
+                  <item id="yi" translatable="yes">Yiddish</item>
+                  <item id="yo" translatable="yes">Yoruba</item>
+                  <item id="zu" translatable="yes">Zulu</item>
+
                 </items>
               </object>
               <packing>
@@ -219,8 +300,89 @@
                 <property name="can_focus">False</property>
                 <property name="active">0</property>
                 <items>
-                  <item id="en" translatable="no">English</item>
-                  <item id="sv" translatable="no">Svenska</item>
+
+                  <item id="af" translatable="yes">Afrikaans</item>
+                  <item id="sq" translatable="yes">Albanian</item>
+                  <item id="ar" translatable="yes">Arabic</item>
+                  <item id="hy" translatable="yes">Armenian</item>
+                  <item id="az" translatable="yes">Azerbaijani</item>
+                  <item id="eu" translatable="yes">Basque</item>
+                  <item id="be" translatable="yes">Belarusian</item>
+                  <item id="bn" translatable="yes">Bengali</item>
+                  <item id="bs" translatable="yes">Bosnian</item>
+                  <item id="bg" translatable="yes">Bulgarian</item>
+                  <item id="ca" translatable="yes">Catalan</item>
+                  <item id="ceb" translatable="yes">Cebuano</item>
+                  <item id="zh-CN" translatable="yes">Chinese (Simplified)</item>
+                  <item id="zh-TW" translatable="yes">Chinese (Traditional)</item>
+                  <item id="hr" translatable="yes">Croatian</item>
+                  <item id="cs" translatable="yes">Czech</item>
+                  <item id="da" translatable="yes">Danish</item>
+                  <item id="nl" translatable="yes">Dutch</item>
+                  <item id="en" translatable="yes">English</item>
+                  <item id="eo" translatable="yes">Esperanto</item>
+                  <item id="et" translatable="yes">Estonian</item>
+                  <item id="tl" translatable="yes">Filipino</item>
+                  <item id="fi" translatable="yes">Finnish</item>
+                  <item id="fr" translatable="yes">French</item>
+                  <item id="gl" translatable="yes">Galician</item>
+                  <item id="ka" translatable="yes">Georgian</item>
+                  <item id="de" translatable="yes">German</item>
+                  <item id="el" translatable="yes">Greek</item>
+                  <item id="gu" translatable="yes">Gujarati</item>
+                  <item id="ht" translatable="yes">Haitian Creole</item>
+                  <item id="ha" translatable="yes">Hausa</item>
+                  <item id="iw" translatable="yes">Hebrew</item>
+                  <item id="hi" translatable="yes">Hindi</item>
+                  <item id="hmn" translatable="yes">Hmong</item>
+                  <item id="hu" translatable="yes">Hungarian</item>
+                  <item id="is" translatable="yes">Icelandic</item>
+                  <item id="ig" translatable="yes">Igbo</item>
+                  <item id="id" translatable="yes">Indonesian</item>
+                  <item id="ga" translatable="yes">Irish</item>
+                  <item id="it" translatable="yes">Italian</item>
+                  <item id="ja" translatable="yes">Japanese</item>
+                  <item id="jw" translatable="yes">Javanese</item>
+                  <item id="kn" translatable="yes">Kannada</item>
+                  <item id="km" translatable="yes">Khmer</item>
+                  <item id="ko" translatable="yes">Korean</item>
+                  <item id="lo" translatable="yes">Lao</item>
+                  <item id="la" translatable="yes">Latin</item>
+                  <item id="lv" translatable="yes">Latvian</item>
+                  <item id="lt" translatable="yes">Lithuanian</item>
+                  <item id="mk" translatable="yes">Macedonian</item>
+                  <item id="ms" translatable="yes">Malay</item>
+                  <item id="mt" translatable="yes">Maltese</item>
+                  <item id="mi" translatable="yes">Maori</item>
+                  <item id="mr" translatable="yes">Marathi</item>
+                  <item id="mn" translatable="yes">Mongolian</item>
+                  <item id="ne" translatable="yes">Nepali</item>
+                  <item id="no" translatable="yes">Norwegian</item>
+                  <item id="fa" translatable="yes">Persian</item>
+                  <item id="pl" translatable="yes">Polish</item>
+                  <item id="pt" translatable="yes">Portuguese</item>
+                  <item id="pa" translatable="yes">Punjabi</item>
+                  <item id="ro" translatable="yes">Romanian</item>
+                  <item id="ru" translatable="yes">Russian</item>
+                  <item id="sr" translatable="yes">Serbian</item>
+                  <item id="sk" translatable="yes">Slovak</item>
+                  <item id="sl" translatable="yes">Slovenian</item>
+                  <item id="so" translatable="yes">Somali</item>
+                  <item id="es" translatable="yes">Spanish</item>
+                  <item id="sw" translatable="yes">Swahili</item>
+                  <item id="sv" translatable="yes">Swedish</item>
+                  <item id="ta" translatable="yes">Tamil</item>
+                  <item id="te" translatable="yes">Telugu</item>
+                  <item id="th" translatable="yes">Thai</item>
+                  <item id="tr" translatable="yes">Turkish</item>
+                  <item id="uk" translatable="yes">Ukrainian</item>
+                  <item id="ur" translatable="yes">Urdu</item>
+                  <item id="vi" translatable="yes">Vietnamese</item>
+                  <item id="cy" translatable="yes">Welsh</item>
+                  <item id="yi" translatable="yes">Yiddish</item>
+                  <item id="yo" translatable="yes">Yoruba</item>
+                  <item id="zu" translatable="yes">Zulu</item>
+
                 </items>
               </object>
               <packing>
