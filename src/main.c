@@ -70,7 +70,7 @@ main(int argc, char *argv[])
 {
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
-	GtkWidget	*top_combo, *bot_combo, *file_new;
+	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -101,6 +101,7 @@ main(int argc, char *argv[])
 	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
+	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
@@ -117,6 +118,7 @@ main(int argc, char *argv[])
 	g_signal_connect(top_combo, "changed", G_CALLBACK(top_combo_cb), &s);
 	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
+	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
 
 	gtk_widget_show(window);
 
