@@ -50,6 +50,7 @@ static void		bot_but_cb(GtkButton *, gpointer);
 static void		top_combo_cb(GtkComboBox *, gpointer);
 static void		bot_combo_cb(GtkComboBox *, gpointer);
 static void		clear_cb(GtkMenuItem *, gpointer);
+static void		about_cb(GtkMenuItem *, gpointer);
 static void		from_clip_cb(GtkWidget *, gpointer);
 static void		clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
@@ -71,6 +72,7 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
+	GtkWidget	*help_about, *about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -94,6 +96,7 @@ main(int argc, char *argv[])
 
 	builder = gtk_builder_new_from_file(INTERFACE_PATH);
 	window = GTK_WIDGET(gtk_builder_get_object(builder, "window1"));
+	about = GTK_WIDGET(gtk_builder_get_object(builder, "aboutdialog1"));
 	top_text = GTK_WIDGET(gtk_builder_get_object(builder, "textview1"));
 	bot_text = GTK_WIDGET(gtk_builder_get_object(builder, "textview2"));
 	top_but = GTK_WIDGET(gtk_builder_get_object(builder, "button1"));
@@ -102,6 +105,7 @@ main(int argc, char *argv[])
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
+	help_about = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-help-about"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
@@ -119,6 +123,7 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
+	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), about);
 
 	gtk_widget_show(window);
 
@@ -242,6 +247,20 @@ clear_cb(GtkMenuItem *menuitem, gpointer user_data)
 
 	gtk_text_buffer_set_text(s->top_buf, "", 0);
 	gtk_text_buffer_set_text(s->bot_buf, "", 0);
+}
+
+
+/*
+ * Show the about dialog.
+ */
+static void
+about_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	GtkWidget	*about;
+
+	about = (GtkWidget *)user_data;
+
+	gtk_widget_show(about);
 }
 
 /*
