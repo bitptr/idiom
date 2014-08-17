@@ -40,14 +40,14 @@ To build from a fresh checkout:
 
     ./autogen.sh
     ./configure
-    make
+    make pkgdatadir=$PWD/share/idiom
 
 Release
 -------
 
 1. Update the version in `configure.ac`:
 
-        AC_INIT([idiom], [0.2], [support@mnfst.io])
+        AC_INIT([idiom], [0.2], [support@bitptr.org])
 
 2. Verify the tarball:
 

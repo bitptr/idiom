@@ -14,7 +14,7 @@ graphical utility translates between written languages.
 It is backed by Google Translate.
 It supports these options and arguments:
 .
-.Bl -tag
+.Bl -tag -width XX
 .It Fl p
 Translate from the
 .Li PRIMARY
@@ -23,11 +23,18 @@ This option fills in the top text box with text from the
 .Li PRIMARY
 and fills in the bottom text box with its translation.
 .El
-.\" .Sx Keyboard Shortcuts
-.\" ^enter , m-t : translate top
-.\" m-b : translate bottom
-.\" ^n : clear text areas
-.\" ^q : quit
+.Ss Keyboard Shortcuts
+In the following descriptions, ^X means control-X.
+.Bl -tag -width XXXX
+.It Ic ^ENTER | M-t
+Translate the top text into the bottom area.
+.It Ic M-b
+Translate the bottom text into the top area.
+.It Ic ^N
+Clear both text areas.
+.It Ic ^Q
+Quit.
+.El
 .\" .Sh ENVIRONMENT
 .\" For sections 1, 6, 7, and 8 only.
 .\" .Sh FILES
@@ -55,5 +62,4 @@ package on Debian.
 .An "Mike Burns" Aq Mt mike@mike-burns.com
 .\" .Sh CAVEATS
 .Sh BUGS
-This can translate any language, so long as you only want to translate from
-Swedish to English.
+Some of the menu items do not work.

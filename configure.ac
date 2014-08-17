@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([idiom], [0.1])
+AC_INIT([idiom], [0.1], [support@bitptr.org])
 AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_PROG_CC
