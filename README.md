@@ -5,8 +5,6 @@ Message for you, sir.
 
 Idiom is a GUI for easily translating text from one language to another.
 
-(So far it only supports translating from Swedish to English.)
-
 Usage
 -----
 
