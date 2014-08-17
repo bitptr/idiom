@@ -8,7 +8,7 @@
     <property name="program_name">Idiom</property>
     <property name="version">0.1</property>
     <property name="copyright" translatable="yes">Copyright 2014 Mike Burns</property>
-    <property name="comments" translatable="yes">A utility to translate the spoken word.</property>
+    <property name="comments" translatable="yes">A utility to translate the written word.</property>
     <property name="website">https://github.com/bitptr/idiom</property>
     <property name="website_label" translatable="yes">Web site</property>
     <property name="authors">Mike Burns</property>
@@ -51,7 +51,6 @@
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
-        <property name="spacing">3</property>
         <child>
           <object class="GtkMenuBar" id="menubar1">
             <property name="visible">True</property>
