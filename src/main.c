@@ -56,8 +56,10 @@ static void		clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
 
 static void		translate_box(struct state *);
-static size_t		accumulate_json(char *, size_t, size_t, void *);
+static void		insert_sentence(JsonArray *, guint, JsonNode *,
+    gpointer);
 
+static size_t		accumulate_mem_buf(char *, size_t, size_t, void *);
 static struct mem_buf	mem_buf_new();
 static void		mem_buf_free(struct mem_buf);
 
@@ -284,11 +286,11 @@ translate_box(struct state *s)
 	char			*url, *esc_buf, errbuf[CURL_ERROR_SIZE];
 	int			 len;
 	size_t			 i;
-	struct mem_buf		 result;
+	struct mem_buf		 raw_json, translation;
 	JsonParser		*parser;
 	GError			*error;
 	JsonNode		*root;
-	const gchar		*value;
+	JsonArray		*sentences;
 	const char		*src_lang, *dst_lang;
 
 	headers = NULL;
@@ -325,7 +327,7 @@ translate_box(struct state *s)
 	if (*src_buf == '\0')
 		return;
 
-	result = mem_buf_new();
+	raw_json = mem_buf_new();
 
 	/* get the translation JSON */
 
@@ -348,8 +350,8 @@ translate_box(struct state *s)
 	curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, &errbuf);
 	curl_easy_setopt(handle, CURLOPT_VERBOSE, 0);
-	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, accumulate_json);
-	curl_easy_setopt(handle, CURLOPT_WRITEDATA, &result);
+	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, accumulate_mem_buf);
+	curl_easy_setopt(handle, CURLOPT_WRITEDATA, &raw_json);
 
 	if (curl_easy_perform(handle) != 0)
 		errx(2, "curl: %s", errbuf);
@@ -365,35 +367,64 @@ translate_box(struct state *s)
 	 * check whether the character to the left is a comma, resulting in 
 	 * ",  ".
 	 */
-	for (i = result.size; i > 0; i--)
-		if (result.mem[i-1] == ',' && result.mem[i] == ',')
-			result.mem[i] = ' ';
+	for (i = raw_json.size; i > 0; i--)
+		if (raw_json.mem[i-1] == ',' && raw_json.mem[i] == ',')
+			raw_json.mem[i] = ' ';
 
 	error = NULL;
 	parser = json_parser_new();
-	if (!json_parser_load_from_data(parser, result.mem, result.size, &error))
+	if (!json_parser_load_from_data(parser, raw_json.mem, raw_json.size, &error))
 		errx(2, "json_parser_load_from_data: %s", error->message);
 
 	root = json_parser_get_root(parser);
-	value = json_array_get_string_element(
-	    json_array_get_array_element(
-		    json_array_get_array_element(
-			    json_node_get_array(root), 0), 0), 0);
+	sentences = json_array_get_array_element(
+	    json_node_get_array(root), 0);
 
-	/* insert the value into the GtkTextView */
-	gtk_text_buffer_set_text(dst_g_buf, value, -1);
+	translation = mem_buf_new();
+	json_array_foreach_element(sentences, insert_sentence, &translation);
+	gtk_text_buffer_set_text(dst_g_buf, translation.mem, -1);
+	mem_buf_free(translation);
 
 	/* cleanup */
 	if (parser != NULL)
 		g_object_unref(parser);
-	mem_buf_free(result);
+	mem_buf_free(raw_json);
 }
 
 /*
- * Add the response string from HTTP to the memory buffer.
+ * Pull the sentence from the translation pair and add it to the memory buffer.
+ */
+static void
+insert_sentence(JsonArray *array, guint index, JsonNode *element_node,
+    gpointer user_data)
+{
+	struct mem_buf	*res;
+	JsonArray	*pair;
+	const gchar	*value;
+	char		*ptr;
+	size_t		 cpy_len, len;
+
+	res = (struct mem_buf *)user_data;
+	pair = json_node_get_array(element_node);
+	value = json_array_get_string_element(pair, 0);
+
+	if ((ptr = calloc(sizeof(char), 1)) == NULL)
+		err(1, "calloc");
+	len = strlen(value);
+	cpy_len = strlcpy(ptr, value, len + 1);
+	if (cpy_len < len)
+		err(1, "strlcpy");
+
+	accumulate_mem_buf(ptr, sizeof(char), strlen(value), res);
+
+	free(ptr);
+}
+
+/*
+ * Add the string to the memory buffer.
  */
 static size_t
-accumulate_json(char *ptr, size_t size, size_t nmemb, void *userdata)
+accumulate_mem_buf(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
 	size_t	len;
 	struct mem_buf	*m;
