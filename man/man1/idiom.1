@@ -18,7 +18,7 @@ It supports these options and arguments:
 .It Fl p
 Translate from the
 .Li PRIMARY
-clipboard.
+selection.
 This option fills in the top text box with text from the
 .Li PRIMARY
 and fills in the bottom text box with its translation.
@@ -30,12 +30,20 @@ In the following descriptions, ^X means control-X.
 Translate the top text into the bottom area.
 .It Ic M-b
 Translate the bottom text into the top area.
+.It Ic ^C
+Copy the selected text into the CLIPBOARD selection.
 .It Ic ^N
 Clear both text areas.
 .It Ic ^O
 Replace the top text box with the contents of a file.
 .It Ic ^Q
 Quit.
+.It Ic ^V
+If a text box is focused, insert the contents of the CLIPBOARD at the cursor's
+position.
+.It Ic ^X
+Copy the selected text into the CLIPBOARD selection, then delete the selected
+text.
 .El
 .\" .Sh ENVIRONMENT
 .\" For sections 1, 6, 7, and 8 only.
@@ -55,8 +63,8 @@ This can happen with the
 .Li libcurl-4-nss-dev
 package on Debian.
 .Pp
-.\" .Sh SEE ALSO
-.\" .Xr foobar 1
+.Sh SEE ALSO
+.Xr xclipboard 1
 .\" .Sh STANDARDS
 .\" .Sh HISTORY
 .Sh AUTHORS
@@ -64,4 +72,4 @@ package on Debian.
 .An "Mike Burns" Aq Mt mike@mike-burns.com
 .\" .Sh CAVEATS
 .Sh BUGS
-Some of the menu items do not work.
+The Save As menu item does not work.
