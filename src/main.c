@@ -2,11 +2,14 @@
 #include <config.h>
 #endif
 
+#include <sys/stat.h>
+
 #include <err.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
+#include <unistd.h>
 
 #include <curl/curl.h>
 #include <gtk/gtk.h>
@@ -56,6 +59,7 @@ static void		 top_combo_cb(GtkComboBox *, gpointer);
 static void		 bot_combo_cb(GtkComboBox *, gpointer);
 static void		 clear_cb(GtkMenuItem *, gpointer);
 static void		 open_cb(GtkMenuItem *, gpointer);
+static void		 write_cb(GtkMenuItem *, gpointer);
 static void		 cut_cb(GtkMenuItem *, gpointer);
 static void		 copy_cb(GtkMenuItem *, gpointer);
 static void		 paste_cb(GtkMenuItem *, gpointer);
@@ -68,7 +72,8 @@ static gboolean		 bot_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
 static gboolean		 top_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
 static gboolean		 bot_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
 
-static GtkTextView	*focused_text_view(struct state *s);
+static GtkTextView	*focused_text_view(struct state *);
+static GtkTextBuffer	*deactivated_text_buf(struct state *);
 
 static void		 translate_box(struct state *);
 static void		 insert_sentence(JsonArray *, guint, JsonNode *,
@@ -78,7 +83,8 @@ static size_t		 accumulate_mem_buf(char *, size_t, size_t, void *);
 static struct mem_buf	 mem_buf_new();
 static void		 mem_buf_free(struct mem_buf);
 
-void			 replace_text_from_file(GtkTextBuffer *, char *);
+static void		 replace_text_from_file(GtkTextBuffer *, char *);
+static void		 write_deactivated(struct state *, char *);
 static char		*read_fd(int);
 
 __dead void		 usage();
@@ -92,7 +98,7 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	GtkWidget	*top_combo, *bot_combo;
-	GtkWidget	*file_new, *file_open, *file_quit;
+	GtkWidget	*file_new, *file_open, *file_save_as, *file_quit;
 	GtkWidget	*edit_cut, *edit_copy, *edit_paste, *help_about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
@@ -125,6 +131,7 @@ main(int argc, char *argv[])
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_open = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-open"));
+	file_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-save-as"));
 	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
 	edit_cut = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-cut"));
 	edit_copy = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-copy"));
@@ -155,6 +162,7 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_text, "focus-out-event", G_CALLBACK(bot_text_out_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 	g_signal_connect(file_open, "activate", G_CALLBACK(open_cb), &s);
+	g_signal_connect(file_save_as, "activate", G_CALLBACK(write_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
 	g_signal_connect(edit_cut, "activate", G_CALLBACK(cut_cb), &s);
 	g_signal_connect(edit_copy, "activate", G_CALLBACK(copy_cb), &s);
@@ -364,15 +372,108 @@ open_cb(GtkMenuItem *menuitem, gpointer user_data)
 	    NULL);
 
 	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
-		if ((path = gtk_file_chooser_get_filename(
-				    GTK_FILE_CHOOSER(dialog))) != NULL) {
+		path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+		if (path != NULL)
 			replace_text_from_file(s->top_buf, path);
-		}
 		g_free(path);
 	}
 
 	gtk_widget_destroy(dialog);
 }
+
+/*
+ * Persist the non-active buffer to a file.
+ */
+static void
+write_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	struct state	*s;
+	GtkWidget	*dialog;
+	GtkFileChooser	*chooser;
+	char		*path;
+
+	s = (struct state *)user_data;
+
+	dialog = gtk_file_chooser_dialog_new(
+	    "Save File",
+	    s->parent,
+	    GTK_FILE_CHOOSER_ACTION_SAVE,
+	    "_Cancel", GTK_RESPONSE_CANCEL,
+	    "_Save", GTK_RESPONSE_ACCEPT,
+	    NULL);
+
+	chooser = GTK_FILE_CHOOSER(dialog);
+	gtk_file_chooser_set_do_overwrite_confirmation(chooser, TRUE);
+	gtk_file_chooser_set_current_name(chooser, "Untitled");
+
+	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+		path = gtk_file_chooser_get_filename(chooser);
+		if (path != NULL)
+			write_deactivated(s, path);
+		g_free(path);
+	}
+
+	gtk_widget_destroy(dialog);
+}
+
+/*
+ * Write the contents of the non-active text box to the specified file path.
+ */
+static void
+write_deactivated(struct state *s, char *path)
+{
+	GtkTextBuffer	*text_buf;
+	GtkTextIter	 start, end;
+ 	gchar		*buf;
+	size_t		 len;
+	int		 fd;
+
+	if ((text_buf = deactivated_text_buf(s)) == NULL)
+		return;
+
+	gtk_text_buffer_get_bounds(text_buf, &start, &end);
+	buf = gtk_text_buffer_get_text(text_buf, &start, &end, 0);
+	len = strlen(buf);
+
+	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd == -1)
+		err(1, "open");
+
+	if (write(fd, buf, len) == -1)
+		warn("write");
+	if (write(fd, "\n", 2) == -1)
+		warn("write");
+
+	close(fd);
+	g_free(buf);
+}
+
+/*
+ * RETURN: the text buffer that is not active, or NULL if no text buffer is
+ * active.
+ */
+static GtkTextBuffer *
+deactivated_text_buf(struct state *s)
+{
+	GtkTextBuffer	*text_buf;
+
+	switch (s->active) {
+	case TOP_BOX:
+		text_buf = s->bot_buf;
+		break;
+	case BOT_BOX:
+		text_buf = s->top_buf;
+		break;
+	case NO_BOX:
+		text_buf = NULL;
+		break;
+	default:
+		errx(EX_SOFTWARE, "unknown src_pos");
+	}
+
+	return text_buf;
+}
+
 
 /*
  * Show the about dialog.
@@ -528,8 +629,7 @@ translate_box(struct state *s)
 		errx(EX_SOFTWARE, "unknown src_pos");
 	}
 
-	gtk_text_buffer_get_start_iter(src_g_buf, &src_start);
-	gtk_text_buffer_get_end_iter(src_g_buf, &src_end);
+	gtk_text_buffer_get_bounds(src_g_buf, &src_start, &src_end);
 	src_buf = gtk_text_buffer_get_text(src_g_buf, &src_start, &src_end, 0);
 
 	if (*src_buf == '\0')
