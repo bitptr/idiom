@@ -3,6 +3,7 @@
 #endif
 
 #include <err.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
@@ -36,6 +37,7 @@ struct state {
 	GtkTextView	*bot_view;	/* The view with the bottom text buffer */
 	const char	*top_lang;	/* The language up top */
 	const char	*bot_lang;	/* The language down bottom */
+	GtkWindow	*parent;	/* The parent window */
 };
 
 /* This is used to transfer data out of curl */
@@ -53,6 +55,7 @@ static void		 bot_but_cb(GtkButton *, gpointer);
 static void		 top_combo_cb(GtkComboBox *, gpointer);
 static void		 bot_combo_cb(GtkComboBox *, gpointer);
 static void		 clear_cb(GtkMenuItem *, gpointer);
+static void		 open_cb(GtkMenuItem *, gpointer);
 static void		 cut_cb(GtkMenuItem *, gpointer);
 static void		 copy_cb(GtkMenuItem *, gpointer);
 static void		 paste_cb(GtkMenuItem *, gpointer);
@@ -75,6 +78,9 @@ static size_t		 accumulate_mem_buf(char *, size_t, size_t, void *);
 static struct mem_buf	 mem_buf_new();
 static void		 mem_buf_free(struct mem_buf);
 
+void			 replace_text_from_file(GtkTextBuffer *, char *);
+static char		*read_fd(int);
+
 __dead void		 usage();
 
 /*
@@ -85,7 +91,8 @@ main(int argc, char *argv[])
 {
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
-	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
+	GtkWidget	*top_combo, *bot_combo;
+	GtkWidget	*file_new, *file_open, *file_quit;
 	GtkWidget	*edit_cut, *edit_copy, *edit_paste, *help_about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
@@ -117,6 +124,7 @@ main(int argc, char *argv[])
 	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
+	file_open = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-open"));
 	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
 	edit_cut = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-cut"));
 	edit_copy = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-copy"));
@@ -132,6 +140,7 @@ main(int argc, char *argv[])
 	s.clipboard = from_clipboard;
 	s.active = NO_BOX;
 	s.focused = TOP_BOX;
+	s.parent = GTK_WINDOW(window);
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -145,6 +154,7 @@ main(int argc, char *argv[])
 	g_signal_connect(top_text, "focus-out-event", G_CALLBACK(top_text_out_cb), &s);
 	g_signal_connect(bot_text, "focus-out-event", G_CALLBACK(bot_text_out_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
+	g_signal_connect(file_open, "activate", G_CALLBACK(open_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
 	g_signal_connect(edit_cut, "activate", G_CALLBACK(cut_cb), &s);
 	g_signal_connect(edit_copy, "activate", G_CALLBACK(copy_cb), &s);
@@ -335,6 +345,34 @@ clear_cb(GtkMenuItem *menuitem, gpointer user_data)
 	gtk_text_buffer_set_text(s->bot_buf, "", 0);
 }
 
+/*
+ * Show a file open dialog, then load the selected file into the top buffer.
+ */
+static void
+open_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	GtkWidget	*dialog;
+	struct state	*s;
+	char		*path;
+
+	s = (struct state *)user_data;
+
+	dialog = gtk_file_chooser_dialog_new(
+	    "Open File", s->parent, GTK_FILE_CHOOSER_ACTION_OPEN,
+	    "_Cancel", GTK_RESPONSE_CANCEL,
+	    "_Open", GTK_RESPONSE_ACCEPT,
+	    NULL);
+
+	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+		if ((path = gtk_file_chooser_get_filename(
+				    GTK_FILE_CHOOSER(dialog))) != NULL) {
+			replace_text_from_file(s->top_buf, path);
+		}
+		g_free(path);
+	}
+
+	gtk_widget_destroy(dialog);
+}
 
 /*
  * Show the about dialog.
@@ -637,4 +675,56 @@ mem_buf_free(struct mem_buf m)
 	free(m.mem);
 	m.mem = NULL;
 	m.size = 0;
+}
+
+/*
+ * Load the contents of the file into the given text buffer widget.
+ */
+void
+replace_text_from_file(GtkTextBuffer *text_buf, char *path)
+{
+	char	*buf;
+	int	 fd;
+
+	if ((fd = open(path, O_RDONLY)) == -1)
+		err(1, "open");
+	buf = read_fd(fd);
+	close(fd);
+
+	gtk_text_buffer_set_text(text_buf, buf, -1);
+
+	free(buf);
+}
+
+/*
+ * Read the contents of a file descriptor and produce that as a character
+ * pointer.
+ */
+static char *
+read_fd(int fd)
+{
+	char	*buf, *nbuf;
+	int	 nread;
+	ssize_t	 ret;
+	size_t	 nbytes;
+
+	nbytes = 1024;
+	nread = 0;
+
+	if ((buf = calloc(nbytes, sizeof(char))) == NULL)
+		err(1, "calloc");
+
+	while ((ret = read(fd, buf + nread, nbytes)) > 0) {
+		nread += nbytes;
+		nbuf = reallocarray(buf, nread + nbytes, sizeof(char));
+		if (nbuf == NULL)
+			err(1, "reallocarray");
+
+		buf = nbuf;
+	}
+
+	if (ret == -1)
+		err(1, "read");
+
+	return buf;
 }
