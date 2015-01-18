@@ -28,7 +28,8 @@ enum which_clip {
 
 struct state {
 	enum src_pos	 active;	/* Which box should be translated */
-	enum which_clip	 clipboard;
+	enum src_pos	 focused;	/* Which box is focused */
+	enum which_clip	 clipboard;	/* Where to source text */
 	GtkTextBuffer	*top_buf;	/* The buffer with the top text */
 	GtkTextBuffer	*bot_buf;	/* The buffer with the bottom text */
 	const char	*top_lang;	/* The language up top */
@@ -50,10 +51,15 @@ static void		bot_but_cb(GtkButton *, gpointer);
 static void		top_combo_cb(GtkComboBox *, gpointer);
 static void		bot_combo_cb(GtkComboBox *, gpointer);
 static void		clear_cb(GtkMenuItem *, gpointer);
+static void		paste_cb(GtkMenuItem *, gpointer);
 static void		about_cb(GtkMenuItem *, gpointer);
 static void		from_clip_cb(GtkWidget *, gpointer);
 static void		clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
+static gboolean		top_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		bot_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		top_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		bot_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
 
 static void		translate_box(struct state *);
 static void		insert_sentence(JsonArray *, guint, JsonNode *,
@@ -74,7 +80,7 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
-	GtkWidget	*help_about;
+	GtkWidget	*edit_paste, *help_about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -106,6 +112,7 @@ main(int argc, char *argv[])
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
+	edit_paste = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-paste"));
 	help_about = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-help-about"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
@@ -114,6 +121,7 @@ main(int argc, char *argv[])
 	s.bot_lang = gtk_combo_box_get_active_id(GTK_COMBO_BOX(bot_combo));
 	s.clipboard = from_clipboard;
 	s.active = NO_BOX;
+	s.focused = TOP_BOX;
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
 	g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
@@ -122,8 +130,13 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_but, "clicked", G_CALLBACK(bot_but_cb), &s);
 	g_signal_connect(top_combo, "changed", G_CALLBACK(top_combo_cb), &s);
 	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
+	g_signal_connect(top_text, "focus-in-event", G_CALLBACK(top_text_in_cb), &s);
+	g_signal_connect(bot_text, "focus-in-event", G_CALLBACK(bot_text_in_cb), &s);
+	g_signal_connect(top_text, "focus-out-event", G_CALLBACK(top_text_out_cb), &s);
+	g_signal_connect(bot_text, "focus-out-event", G_CALLBACK(bot_text_out_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
+	g_signal_connect(edit_paste, "activate", G_CALLBACK(paste_cb), &s);
 	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), window);
 
 	gtk_widget_show(window);
@@ -238,6 +251,66 @@ bot_combo_cb(GtkComboBox *widget, gpointer user_data)
 }
 
 /*
+ * When the user focuses the top box, consider it focused.
+ */
+static gboolean
+top_text_in_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	s->focused = TOP_BOX;
+
+	return FALSE;
+}
+
+/*
+ * When the user focuses the bottom box, consider it focused.
+ */
+static gboolean
+bot_text_in_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	s->focused = BOT_BOX;
+
+	return FALSE;
+}
+
+/*
+ * When the user unfocuses the top box, and that box was focused, consider no
+ * box focused.
+ */
+static gboolean
+top_text_out_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	if (s->focused == TOP_BOX)
+		s->focused = NO_BOX;
+
+	return FALSE;
+}
+
+/*
+ * When the user unfocuses the bottom box, and that box was focused, consider
+ * no box focused.
+ */
+static gboolean
+bot_text_out_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+	struct state	*s;
+	s = (struct state *)user_data;
+
+	if (s->focused == BOT_BOX)
+		s->focused = NO_BOX;
+
+	return FALSE;
+}
+
+/*
  * Clear the text buffers.
  */
 static void
@@ -272,6 +345,34 @@ about_cb(GtkMenuItem *menuitem, gpointer user_data)
 	    "license_type", GTK_LICENSE_BSD,
 	    "authors", authors,
 	    NULL);
+}
+
+static void
+paste_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	GtkClipboard	*cb;
+	GtkTextBuffer	*text_buf;
+	struct state	*s;
+
+	cb = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+	s = (struct state *)user_data;
+
+	switch (s->focused) {
+	case TOP_BOX:
+		text_buf = s->top_buf;
+		break;
+	case BOT_BOX:
+		text_buf = s->bot_buf;
+		break;
+	case NO_BOX:
+		return;
+		/* NOTREACHED */
+		break;
+	default:
+		errx(EX_SOFTWARE, "unknown src_pos");
+	}
+
+	gtk_text_buffer_paste_clipboard(text_buf, cb, NULL, TRUE);
 }
 
 /*
