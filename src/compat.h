@@ -24,7 +24,7 @@ size_t	strlcpy(char *, const char *, size_t);
 
 #ifndef HAVE_REALLOCARRAY
 #include <sys/types.h>
-void	*reallocarray(void *optr, size_t nmemb, size_t size)
+void	*reallocarray(void *optr, size_t nmemb, size_t size);
 #endif /* !HAVE_REALLOCARRAY */
 
 #endif /* COMPAT_H */
