@@ -32,6 +32,8 @@ struct state {
 	enum which_clip	 clipboard;	/* Where to source text */
 	GtkTextBuffer	*top_buf;	/* The buffer with the top text */
 	GtkTextBuffer	*bot_buf;	/* The buffer with the bottom text */
+	GtkTextView	*top_view;	/* The view with the top text buffer */
+	GtkTextView	*bot_view;	/* The view with the bottom text buffer */
 	const char	*top_lang;	/* The language up top */
 	const char	*bot_lang;	/* The language down bottom */
 };
@@ -46,30 +48,34 @@ struct mem_buf {
 
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12"
 
-static void		top_but_cb(GtkButton *, gpointer);
-static void		bot_but_cb(GtkButton *, gpointer);
-static void		top_combo_cb(GtkComboBox *, gpointer);
-static void		bot_combo_cb(GtkComboBox *, gpointer);
-static void		clear_cb(GtkMenuItem *, gpointer);
-static void		paste_cb(GtkMenuItem *, gpointer);
-static void		about_cb(GtkMenuItem *, gpointer);
-static void		from_clip_cb(GtkWidget *, gpointer);
-static void		clip_received_cb(GtkClipboard *, const gchar *,
+static void		 top_but_cb(GtkButton *, gpointer);
+static void		 bot_but_cb(GtkButton *, gpointer);
+static void		 top_combo_cb(GtkComboBox *, gpointer);
+static void		 bot_combo_cb(GtkComboBox *, gpointer);
+static void		 clear_cb(GtkMenuItem *, gpointer);
+static void		 cut_cb(GtkMenuItem *, gpointer);
+static void		 copy_cb(GtkMenuItem *, gpointer);
+static void		 paste_cb(GtkMenuItem *, gpointer);
+static void		 about_cb(GtkMenuItem *, gpointer);
+static void		 from_clip_cb(GtkWidget *, gpointer);
+static void		 clip_received_cb(GtkClipboard *, const gchar *,
     gpointer);
-static gboolean		top_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
-static gboolean		bot_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
-static gboolean		top_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
-static gboolean		bot_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		 top_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		 bot_text_in_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		 top_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
+static gboolean		 bot_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
 
-static void		translate_box(struct state *);
-static void		insert_sentence(JsonArray *, guint, JsonNode *,
+static GtkTextView	*focused_text_view(struct state *s);
+
+static void		 translate_box(struct state *);
+static void		 insert_sentence(JsonArray *, guint, JsonNode *,
     gpointer);
 
-static size_t		accumulate_mem_buf(char *, size_t, size_t, void *);
-static struct mem_buf	mem_buf_new();
-static void		mem_buf_free(struct mem_buf);
+static size_t		 accumulate_mem_buf(char *, size_t, size_t, void *);
+static struct mem_buf	 mem_buf_new();
+static void		 mem_buf_free(struct mem_buf);
 
-__dead void		usage();
+__dead void		 usage();
 
 /*
  * idiom(1) is a GUI program for translating text from one language to another.
@@ -80,7 +86,7 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
-	GtkWidget	*edit_paste, *help_about;
+	GtkWidget	*edit_cut, *edit_copy, *edit_paste, *help_about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -112,11 +118,15 @@ main(int argc, char *argv[])
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_quit = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-quit"));
+	edit_cut = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-cut"));
+	edit_copy = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-copy"));
 	edit_paste = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-edit-paste"));
 	help_about = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-help-about"));
 
 	s.top_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(top_text));
 	s.bot_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(bot_text));
+	s.top_view = GTK_TEXT_VIEW(top_text);
+	s.bot_view = GTK_TEXT_VIEW(bot_text);
 	s.top_lang = gtk_combo_box_get_active_id(GTK_COMBO_BOX(top_combo));
 	s.bot_lang = gtk_combo_box_get_active_id(GTK_COMBO_BOX(bot_combo));
 	s.clipboard = from_clipboard;
@@ -136,6 +146,8 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_text, "focus-out-event", G_CALLBACK(bot_text_out_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
+	g_signal_connect(edit_cut, "activate", G_CALLBACK(cut_cb), &s);
+	g_signal_connect(edit_copy, "activate", G_CALLBACK(copy_cb), &s);
 	g_signal_connect(edit_paste, "activate", G_CALLBACK(paste_cb), &s);
 	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), window);
 
@@ -347,33 +359,81 @@ about_cb(GtkMenuItem *menuitem, gpointer user_data)
 	    NULL);
 }
 
+/*
+ * Activate the cut-clipboard signal on the focused text view.
+ */
+static void
+cut_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	GtkTextView	*text_view;
+	struct state	*s;
+
+	s = (struct state *)user_data;
+	if ((text_view = focused_text_view(s)) == NULL)
+		return;
+
+	g_signal_emit_by_name(text_view, "cut-clipboard", NULL);
+}
+
+/*
+ * Activate the copy-clipboard signal on the focused text view.
+ */
+static void
+copy_cb(GtkMenuItem *menuitem, gpointer user_data)
+{
+	GtkTextView	*text_view;
+	struct state	*s;
+
+	s = (struct state *)user_data;
+	if ((text_view = focused_text_view(s)) == NULL)
+		return;
+
+	g_signal_emit_by_name(text_view, "copy-clipboard", NULL);
+}
+
+/*
+ * Activate the paste-clipboard signal on the focused text view.
+ */
 static void
 paste_cb(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkClipboard	*cb;
-	GtkTextBuffer	*text_buf;
+	GtkTextView	*text_view;
 	struct state	*s;
 
-	cb = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
 	s = (struct state *)user_data;
+	if ((text_view = focused_text_view(s)) == NULL)
+		return;
+
+	g_signal_emit_by_name(text_view, "paste-clipboard", NULL);
+}
+
+/*
+ * RETURN: a pointer to the GtkTexView that is currently focused. If no box is
+ * currently focused, return NULL.
+ */
+static GtkTextView *
+focused_text_view(struct state *s)
+{
+	GtkTextView	*text_view;
 
 	switch (s->focused) {
 	case TOP_BOX:
-		text_buf = s->top_buf;
+		text_view = s->top_view;
 		break;
 	case BOT_BOX:
-		text_buf = s->bot_buf;
+		text_view = s->bot_view;
 		break;
 	case NO_BOX:
-		return;
+		return NULL;
 		/* NOTREACHED */
 		break;
 	default:
 		errx(EX_SOFTWARE, "unknown src_pos");
 	}
 
-	gtk_text_buffer_paste_clipboard(text_buf, cb, NULL, TRUE);
+	return text_view;
 }
+
 
 /*
  * Translate the text into the other box.
