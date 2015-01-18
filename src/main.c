@@ -74,7 +74,7 @@ main(int argc, char *argv[])
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
 	GtkWidget	*top_combo, *bot_combo, *file_new, *file_quit;
-	GtkWidget	*help_about, *about;
+	GtkWidget	*help_about;
 	struct state	 s;
 	enum which_clip	 from_clipboard;
 	int		 ch;
@@ -98,7 +98,6 @@ main(int argc, char *argv[])
 
 	builder = gtk_builder_new_from_file(INTERFACE_PATH);
 	window = GTK_WIDGET(gtk_builder_get_object(builder, "window1"));
-	about = GTK_WIDGET(gtk_builder_get_object(builder, "aboutdialog1"));
 	top_text = GTK_WIDGET(gtk_builder_get_object(builder, "textview1"));
 	bot_text = GTK_WIDGET(gtk_builder_get_object(builder, "textview2"));
 	top_but = GTK_WIDGET(gtk_builder_get_object(builder, "button1"));
@@ -125,7 +124,7 @@ main(int argc, char *argv[])
 	g_signal_connect(bot_combo, "changed", G_CALLBACK(bot_combo_cb), &s);
 	g_signal_connect(file_new, "activate", G_CALLBACK(clear_cb), &s);
 	g_signal_connect(file_quit, "activate", G_CALLBACK(gtk_main_quit), NULL);
-	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), about);
+	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), window);
 
 	gtk_widget_show(window);
 
@@ -258,11 +257,21 @@ clear_cb(GtkMenuItem *menuitem, gpointer user_data)
 static void
 about_cb(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget	*about;
+	GtkWindow	*parent;
+	char		*authors[] = { "Mike Burns", NULL };
 
-	about = (GtkWidget *)user_data;
+	parent = GTK_WINDOW(user_data);
 
-	gtk_widget_show(about);
+	gtk_show_about_dialog(parent,
+	    "program-name", "Idiom",
+	    "version", PACKAGE_VERSION,
+	    "copyright", "Copyright 2014, 2015 Mike Burns",
+	    "comments", "A utility to translate the written word.",
+	    "website", "https://github.com/bitptr/idiom",
+	    "website_label", "Web site",
+	    "license_type", GTK_LICENSE_BSD,
+	    "authors", authors,
+	    NULL);
 }
 
 /*
