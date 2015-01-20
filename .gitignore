@@ -23,3 +23,4 @@ configure
 depcomp
 idiom-*.tar.gz
 idiom-*.tar.gz.asc
+data/org.bitptr.idiom.desktop

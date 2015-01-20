@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Idiom
+GenericName=Translation Tool
+Comment=Translate the written word
+Exec=@bindir@/idiom
+Terminal=false
+Type=Application
+StartupNotify=false
+DBusActivatable=false
+Categories=GTK;Utility;Translation;TextTools;
+Keywords=translate;
+Icon=idiom
+Version=1.0
