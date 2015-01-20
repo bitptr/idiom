@@ -719,7 +719,7 @@ insert_sentence(JsonArray *array, guint index, JsonNode *element_node,
 	value = json_array_get_string_element(pair, 0);
 
 	len = strlen(value);
-	if ((ptr = calloc(sizeof(char), len + 1)) == NULL)
+	if ((ptr = calloc(len + 1, sizeof(char))) == NULL)
 		err(1, "calloc");
 	cpy_len = strlcpy(ptr, value, len + 1);
 	if (cpy_len < len)
