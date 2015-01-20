@@ -2,4 +2,6 @@
 #define PATHNAMES_H
 
 #define INTERFACE_PATH PKGDATADIR"/idiom.ui"
-#endif
+#define ICON_NAME "idiom"
+
+#endif /* !PATHNAMES_H */

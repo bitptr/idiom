@@ -169,6 +169,7 @@ main(int argc, char *argv[])
 	g_signal_connect(edit_paste, "activate", G_CALLBACK(paste_cb), &s);
 	g_signal_connect(help_about, "activate", G_CALLBACK(about_cb), window);
 
+	gtk_window_set_default_icon_name(ICON_NAME);
 	gtk_widget_show(window);
 
 	gtk_main();
@@ -493,6 +494,7 @@ about_cb(GtkMenuItem *menuitem, gpointer user_data)
 	    "comments", "A utility to translate the written word.",
 	    "website", "https://bitptr.org/tools/idiom",
 	    "website_label", "Web site",
+	    "logo-icon-name", ICON_NAME,
 	    "license_type", GTK_LICENSE_BSD,
 	    "authors", authors,
 	    NULL);
