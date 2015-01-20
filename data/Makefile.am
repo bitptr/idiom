@@ -1,25 +1,25 @@
 SUBDIRS = icons
 
 desktopdir = $(datadir)/applications
-dist_desktop_DATA = org.bitptr.idiom.desktop
+desktop_in_files=org.bitptr.idiom.desktop.in
+desktop_DATA = org.bitptr.idiom.desktop
 
 edit = sed -e 's|@bindir[@]|$(bindir)|g'
 
-org.bitptr.idiom.desktop: Makefile
-	rm -f $@ $@.tmp
-	srcdir=''; \
-	  test -f ./$@.in || srcdir=$(srcdir)/; \
-	  $(edit) $${srcdir}$@.in >$@.tmp
-	chmod +x $@.tmp
-	chmod a-w $@.tmp
-	mv $@.tmp $@
+EXTRA_DIST = $(desktop_in_files)
 
-org.bitptr.idiom.desktop: $(srcdir)/org.bitptr.idiom.desktop.in
+CLEANFILES = $(desktop_DATA)
 
-UPDATE_DESKTOP = update-desktop-database $(datadir)/applications || :
+SUFFIXES = .desktop .desktop.in
+
+.desktop.in.desktop:
+	$(edit) $< > $@
+
+UPDATE_DESKTOP = update-desktop-database $(DESTDIR)$(desktopdir) || :
 
 install-data-hook: 
 	$(UPDATE_DESKTOP)
 
 uninstall-hook: 
 	$(UPDATE_DESKTOP)
+	rm -f $(DESTDIR)$(desktopdir)/mimeinfo.cache
