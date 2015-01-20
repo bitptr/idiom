@@ -15,11 +15,15 @@ SUFFIXES = .desktop .desktop.in
 .desktop.in.desktop:
 	$(edit) $< > $@
 
-UPDATE_DESKTOP = update-desktop-database $(DESTDIR)$(desktopdir) || :
+update-desktop-database:
+	@-if test -z "$(DESTDIR)"; then \
+	        echo "Updating .desktop database."; \
+	        update-desktop-database; \
+	else \
+	        echo "*** .desktop database not updated.  After (un)install, run:"; \
+	        echo "***   update-desktop-database"; \
+	fi
 
-install-data-hook: 
-	$(UPDATE_DESKTOP)
+install-data-hook: update-desktop-database
 
-uninstall-hook: 
-	$(UPDATE_DESKTOP)
-	rm -f $(DESTDIR)$(desktopdir)/mimeinfo.cache
+uninstall-hook: update-desktop-database
