@@ -41,12 +41,27 @@ struct state {
 	const char	*top_lang;	/* The language up top */
 	const char	*bot_lang;	/* The language down bottom */
 	GtkWindow	*parent;	/* The parent window */
+	GtkProgressBar	*prog_bar;	/* The progress bar */
 };
 
 /* This is used to transfer data out of curl */
 struct mem_buf {
 	char	*mem;	/* The actual string */
 	size_t	 size;	/* The size of the string */
+};
+
+/*
+ * This is used to transfer the data between the processing thread and the main
+ * thread.
+ */
+struct trans_text {
+	gchar		*src;		/* The source text */
+	GtkTextBuffer	*dst_g_buf;	/* The destination text buffer */
+	GtkProgressBar	*prog_bar;	/* The progress bar */
+	const char	*src_lang;	/* The source language */
+	const char	*dst_lang;	/* The destination language */
+	struct mem_buf	*translation;	/* The translated text */
+	guint		 timeout_id;	/* The progressbar pulser id */
 };
 
 #define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=%s&tl=%s&dt=bd&dt=t&dt=at&q=%s"
@@ -80,12 +95,16 @@ static void		 insert_sentence(JsonArray *, guint, JsonNode *,
     gpointer);
 
 static size_t		 accumulate_mem_buf(char *, size_t, size_t, void *);
-static struct mem_buf	 mem_buf_new();
-static void		 mem_buf_free(struct mem_buf);
+static struct mem_buf	*mem_buf_new();
+static void		 mem_buf_free(struct mem_buf*);
 
 static void		 replace_text_from_file(GtkTextBuffer *, char *);
 static void		 write_deactivated(struct state *, char *);
 static char		*read_fd(int);
+
+gpointer		 translate_box_func(gpointer);
+gboolean		 set_translation_text(gpointer);
+gboolean		 pulse(gpointer);
 
 __dead void		 usage();
 
@@ -97,7 +116,7 @@ main(int argc, char *argv[])
 {
 	GtkBuilder	*builder;
 	GtkWidget	*window, *top_text, *bot_text, *top_but, *bot_but;
-	GtkWidget	*top_combo, *bot_combo;
+	GtkWidget	*top_combo, *bot_combo, *prog_bar;
 	GtkWidget	*file_new, *file_open, *file_save_as, *file_quit;
 	GtkWidget	*edit_cut, *edit_copy, *edit_paste, *help_about;
 	struct state	 s;
@@ -129,6 +148,7 @@ main(int argc, char *argv[])
 	bot_but = GTK_WIDGET(gtk_builder_get_object(builder, "button2"));
 	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
+	prog_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progressbar1"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_open = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-open"));
 	file_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-save-as"));
@@ -147,6 +167,7 @@ main(int argc, char *argv[])
 	s.clipboard = from_clipboard;
 	s.active = NO_BOX;
 	s.focused = TOP_BOX;
+	s.prog_bar = GTK_PROGRESS_BAR(prog_bar);
 	s.parent = GTK_WINDOW(window);
 
 	gtk_window_set_default_size(GTK_WINDOW(window), 800, 400);
@@ -437,15 +458,26 @@ write_deactivated(struct state *s, char *path)
 	len = strlen(buf);
 
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd == -1)
-		err(1, "open");
+	if (fd == -1) {
+		warn("open");
+		goto cleanup;
+	}
 
-	if (write(fd, buf, len) == -1)
+	if (write(fd, buf, len) == -1) {
 		warn("write");
-	if (write(fd, "\n", 2) == -1)
-		warn("write");
+		goto cleanup;
+	}
 
-	close(fd);
+	if (write(fd, "\n", 2) == -1) {
+		warn("write");
+		goto cleanup;
+	}
+
+cleanup:
+
+	if (fd > -1)
+		close(fd);
+
 	g_free(buf);
 }
 
@@ -575,41 +607,27 @@ focused_text_view(struct state *s)
 	return text_view;
 }
 
-
 /*
- * Translate the text into the other box.
- *
- * This function does too much:
- *
- * 1. Read the buffer from the active box.
- * 2. Fetch a translation from the Internet.
- * 3. Parse the JSON.
- * 4. Set the buffer of the inactive box.
+ * Start the translation.
  */
 static void
 translate_box(struct state *s)
 {
-	GtkTextBuffer		*src_g_buf, *dst_g_buf;
-	GtkTextIter		src_start, src_end;
-	CURL			*handle;
-	struct curl_slist	*headers;
+	GThread			*thr;
+	struct trans_text	*t;
  	gchar			*src_buf;
-	char			*url, *esc_buf, errbuf[CURL_ERROR_SIZE];
-	int			 len;
-	size_t			 i;
-	struct mem_buf		 raw_json, translation;
-	JsonParser		*parser;
-	GError			*error;
-	JsonNode		*root;
-	JsonArray		*sentences;
+	GtkTextIter		 src_start, src_end;
+	GtkTextBuffer		*src_g_buf, *dst_g_buf;
 	const char		*src_lang, *dst_lang;
+	guint			 timeout_id;
 
-	headers = NULL;
-	parser = NULL;
 	src_buf = NULL;
+	t = NULL;
+
+	gtk_progress_bar_pulse(s->prog_bar);
+	timeout_id = g_timeout_add(100, pulse, s->prog_bar);
 
 	/* get the string from the user */
-
 	switch (s->active) {
 	case TOP_BOX:
 		src_g_buf = s->top_buf;
@@ -635,36 +653,109 @@ translate_box(struct state *s)
 	src_buf = gtk_text_buffer_get_text(src_g_buf, &src_start, &src_end, 0);
 
 	if (*src_buf == '\0')
-		return;
+		goto cleanup;
+
+	if ((t = (struct trans_text *)malloc(sizeof(struct trans_text))) == NULL)
+		err(1, "malloc");
+
+	t->src = src_buf;
+	t->dst_g_buf = dst_g_buf;
+	t->src_lang = src_lang;
+	t->dst_lang = dst_lang;
+	t->timeout_id = timeout_id;
+	t->prog_bar = s->prog_bar;
+
+	/* launch the thread */
+	thr = g_thread_new("translator", translate_box_func, t);
+	g_thread_unref(thr);
+	return;
+
+cleanup:
+	g_source_remove(timeout_id);
+	gtk_progress_bar_set_fraction(s->prog_bar, 0.0);
+	free(t);
+}
+
+/*
+ * Pulsate the progress bar.
+ *
+ * RETURN: true, so the function is run again.
+ */
+gboolean
+pulse(gpointer user_data)
+{
+	GtkProgressBar	*prog_bar;
+	prog_bar = (GtkProgressBar *)user_data;
+
+	gtk_progress_bar_pulse(prog_bar);
+	return TRUE;
+}
+
+/*
+ * Translate the text into the other box.
+ *
+ * This function does too much:
+ *
+ * 1. Read the buffer from the active box.
+ * 2. Fetch a translation from the Internet.
+ * 3. Parse the JSON.
+ * 4. Set the buffer of the inactive box.
+ */
+gpointer
+translate_box_func(gpointer data)
+{
+	CURL			*handle;
+	struct curl_slist	*headers;
+	char			*url, *esc_buf, errbuf[CURL_ERROR_SIZE];
+	int			 len;
+	size_t			 i;
+	struct mem_buf		*raw_json, *translation;
+	JsonParser		*parser;
+	GError			*error;
+	JsonNode		*root;
+	JsonArray		*sentences;
+	struct trans_text	*t;
+
+	t = (struct trans_text *)data;
+	headers = NULL;
+	parser = NULL;
 
 	raw_json = mem_buf_new();
 
 	/* get the translation JSON */
 
-	if ((handle = curl_easy_init()) == NULL)
-		errx(1, "curl_easy_init failed");
+	if ((handle = curl_easy_init()) == NULL) {
+		warn("curl_easy_init failed");
+		goto done;
+	}
 
-	len = strlen(src_buf);
-	if ((esc_buf = curl_easy_escape(handle, src_buf, len)) == NULL)
-		err(1, "curl_easy_escape");
+	len = strlen(t->src);
+	if ((esc_buf = curl_easy_escape(handle, t->src, len)) == NULL) {
+		warn("curl_easy_escape");
+		goto done;
+	}
 	/*    URL format            - %s + user input      + \0 */
 	len = strlen(TRANS_URL_FMT) -  2 + strlen(esc_buf) + 1;
 	if ((url = calloc(len, sizeof(char))) == NULL)
 		err(1, "calloc");
-	snprintf(url, len, TRANS_URL_FMT, src_lang, dst_lang, esc_buf);
+	snprintf(url, len, TRANS_URL_FMT, t->src_lang, t->dst_lang, esc_buf);
 
-	if ((headers = curl_slist_append(headers, "User-Agent: "USER_AGENT)) == NULL)
-		errx(1, "curl_slist_append");
+	if ((headers = curl_slist_append(headers, "User-Agent: "USER_AGENT)) == NULL) {
+		warn("curl_slist_append");
+		goto done;
+	}
 
 	curl_easy_setopt(handle, CURLOPT_URL, url);
 	curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, &errbuf);
 	curl_easy_setopt(handle, CURLOPT_VERBOSE, 0);
 	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, accumulate_mem_buf);
-	curl_easy_setopt(handle, CURLOPT_WRITEDATA, &raw_json);
+	curl_easy_setopt(handle, CURLOPT_WRITEDATA, raw_json);
 
-	if (curl_easy_perform(handle) != 0)
-		errx(2, "curl: %s", errbuf);
+	if (curl_easy_perform(handle) != 0) {
+		warn("curl: %s", errbuf);
+		goto done;
+	}
 
 	curl_easy_cleanup(handle);
 	curl_slist_free_all(headers);
@@ -677,28 +768,55 @@ translate_box(struct state *s)
 	 * check whether the character to the left is a comma, resulting in 
 	 * ",  ".
 	 */
-	for (i = raw_json.size; i > 0; i--)
-		if (raw_json.mem[i-1] == ',' && raw_json.mem[i] == ',')
-			raw_json.mem[i] = ' ';
+	for (i = raw_json->size; i > 0; i--)
+		if (raw_json->mem[i-1] == ',' && raw_json->mem[i] == ',')
+			raw_json->mem[i] = ' ';
 
 	error = NULL;
 	parser = json_parser_new();
-	if (!json_parser_load_from_data(parser, raw_json.mem, raw_json.size, &error))
-		errx(2, "json_parser_load_from_data: %s", error->message);
+	if (!json_parser_load_from_data(parser, raw_json->mem, raw_json->size, &error)) {
+		warn("json_parser_load_from_data: %s", error->message);
+		goto done;
+	}
 
 	root = json_parser_get_root(parser);
 	sentences = json_array_get_array_element(
 	    json_node_get_array(root), 0);
 
 	translation = mem_buf_new();
-	json_array_foreach_element(sentences, insert_sentence, &translation);
-	gtk_text_buffer_set_text(dst_g_buf, translation.mem, -1);
-	mem_buf_free(translation);
+	json_array_foreach_element(sentences, insert_sentence, translation);
 
-	/* cleanup */
+	t->translation = translation;
+	g_idle_add(set_translation_text, t);
+
+done:
 	if (parser != NULL)
 		g_object_unref(parser);
 	mem_buf_free(raw_json);
+	if (t->timeout_id != 0)
+		g_source_remove(t->timeout_id);
+	t->timeout_id = 0;
+	gtk_progress_bar_set_fraction(t->prog_bar, 0.0);
+
+	return NULL;
+}
+
+/*
+ * Update the specified GtkTextBuffer with the translated text.
+ *
+ * RETURN: false, so the function is not run again.
+ */
+gboolean
+set_translation_text(gpointer data)
+{
+	struct trans_text	*t;
+	t = (struct trans_text *)data;
+
+	gtk_text_buffer_set_text(t->dst_g_buf, t->translation->mem, -1);
+	mem_buf_free(t->translation);
+	free(t);
+
+	return G_SOURCE_REMOVE;
 }
 
 /*
@@ -756,13 +874,16 @@ accumulate_mem_buf(char *ptr, size_t size, size_t nmemb, void *userdata)
  * Build a new empty memory buffer: size zero, allocated space for a single
  * char.
  */
-static struct mem_buf
+static struct mem_buf*
 mem_buf_new()
 {
-	struct mem_buf	m;
+	struct mem_buf	*m;
 
-	m.size = 0;
-	if ((m.mem = calloc(1, sizeof(char))) == NULL)
+	if ((m = (struct mem_buf *)malloc(sizeof(struct mem_buf))) == NULL)
+		err(1, "malloc");
+
+	m->size = 0;
+	if ((m->mem = calloc(1, sizeof(char))) == NULL)
 		err(1, "calloc");
 
 	return m;
@@ -772,11 +893,12 @@ mem_buf_new()
  * Free the memory buffer.
  */
 static void
-mem_buf_free(struct mem_buf m)
+mem_buf_free(struct mem_buf *m)
 {
-	free(m.mem);
-	m.mem = NULL;
-	m.size = 0;
+	free(m->mem);
+	m->mem = NULL;
+	m->size = 0;
+	free(m);
 }
 
 /*
@@ -788,12 +910,18 @@ replace_text_from_file(GtkTextBuffer *text_buf, char *path)
 	char	*buf;
 	int	 fd;
 
-	if ((fd = open(path, O_RDONLY)) == -1)
-		err(1, "open");
+	buf = NULL;
+
+	if ((fd = open(path, O_RDONLY)) == -1) {
+		warn("open");
+		goto cleanup;
+	}
 	buf = read_fd(fd);
 	close(fd);
 
 	gtk_text_buffer_set_text(text_buf, buf, -1);
+
+cleanup:
 
 	free(buf);
 }
@@ -826,7 +954,7 @@ read_fd(int fd)
 	}
 
 	if (ret == -1)
-		err(1, "read");
+		warn("read");
 
 	return buf;
 }
