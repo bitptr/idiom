@@ -90,6 +90,8 @@ static gboolean		 bot_text_out_cb(GtkWidget *, GdkEvent *, gpointer);
 static GtkTextView	*focused_text_view(struct state *);
 static GtkTextBuffer	*deactivated_text_buf(struct state *);
 
+static void		 xwarn(const char *fmt, ...);
+
 static void		 translate_box(struct state *);
 static void		 insert_sentence(JsonArray *, guint, JsonNode *,
     gpointer);
@@ -107,6 +109,8 @@ gboolean		 set_translation_text(gpointer);
 gboolean		 pulse(gpointer);
 
 __dead void		 usage();
+
+static GtkStatusbar	*status_bar = NULL;
 
 /*
  * idiom(1) is a GUI program for translating text from one language to another.
@@ -148,6 +152,7 @@ main(int argc, char *argv[])
 	bot_but = GTK_WIDGET(gtk_builder_get_object(builder, "button2"));
 	top_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext1"));
 	bot_combo = GTK_WIDGET(gtk_builder_get_object(builder, "comboboxtext2"));
+	status_bar = GTK_STATUSBAR(gtk_builder_get_object(builder, "statusbar1"));
 	prog_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progressbar1"));
 	file_new = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-new"));
 	file_open = GTK_WIDGET(gtk_builder_get_object(builder, "menu-item-file-open"));
@@ -459,17 +464,17 @@ write_deactivated(struct state *s, char *path)
 
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	if (fd == -1) {
-		warn("open");
+		xwarn("open");
 		goto cleanup;
 	}
 
 	if (write(fd, buf, len) == -1) {
-		warn("write");
+		xwarn("write");
 		goto cleanup;
 	}
 
 	if (write(fd, "\n", 2) == -1) {
-		warn("write");
+		xwarn("write");
 		goto cleanup;
 	}
 
@@ -505,6 +510,39 @@ deactivated_text_buf(struct state *s)
 	}
 
 	return text_buf;
+}
+
+/*
+ * Show the warning in the statusbar, and also in warn(3).
+ */
+void
+xwarn(const char *fmt, ...)
+{
+	va_list	 ap;
+	guint	 cxt_id;
+	char	*msg;
+
+	va_start(ap, fmt);
+
+	if (status_bar == NULL) {
+		vwarn(fmt, ap);
+		goto cleanup;
+	}
+
+	cxt_id = gtk_statusbar_get_context_id(status_bar, "warning");
+
+	if (vasprintf(&msg, fmt, ap) == -1) {
+		warn("vasprintf");
+		goto cleanup;
+	}
+
+	warn(msg);
+	gtk_statusbar_push(status_bar, cxt_id, msg);
+
+cleanup:
+
+	va_end(ap);
+	free(msg);
 }
 
 
@@ -725,13 +763,13 @@ translate_box_func(gpointer data)
 	/* get the translation JSON */
 
 	if ((handle = curl_easy_init()) == NULL) {
-		warn("curl_easy_init failed");
+		xwarn("curl_easy_init failed");
 		goto done;
 	}
 
 	len = strlen(t->src);
 	if ((esc_buf = curl_easy_escape(handle, t->src, len)) == NULL) {
-		warn("curl_easy_escape");
+		xwarn("curl_easy_escape");
 		goto done;
 	}
 	/*    URL format            - %s + user input      + \0 */
@@ -741,7 +779,7 @@ translate_box_func(gpointer data)
 	snprintf(url, len, TRANS_URL_FMT, t->src_lang, t->dst_lang, esc_buf);
 
 	if ((headers = curl_slist_append(headers, "User-Agent: "USER_AGENT)) == NULL) {
-		warn("curl_slist_append");
+		xwarn("curl_slist_append");
 		goto done;
 	}
 
@@ -753,7 +791,7 @@ translate_box_func(gpointer data)
 	curl_easy_setopt(handle, CURLOPT_WRITEDATA, raw_json);
 
 	if (curl_easy_perform(handle) != 0) {
-		warn("curl: %s", errbuf);
+		xwarn("curl: %s", errbuf);
 		goto done;
 	}
 
@@ -775,7 +813,7 @@ translate_box_func(gpointer data)
 	error = NULL;
 	parser = json_parser_new();
 	if (!json_parser_load_from_data(parser, raw_json->mem, raw_json->size, &error)) {
-		warn("json_parser_load_from_data: %s", error->message);
+		xwarn("json_parser_load_from_data: %s", error->message);
 		goto done;
 	}
 
@@ -913,7 +951,7 @@ replace_text_from_file(GtkTextBuffer *text_buf, char *path)
 	buf = NULL;
 
 	if ((fd = open(path, O_RDONLY)) == -1) {
-		warn("open");
+		xwarn("open");
 		goto cleanup;
 	}
 	buf = read_fd(fd);
@@ -954,7 +992,7 @@ read_fd(int fd)
 	}
 
 	if (ret == -1)
-		warn("read");
+		xwarn("read");
 
 	return buf;
 }
