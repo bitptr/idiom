@@ -64,7 +64,7 @@ struct trans_text {
 	guint		 timeout_id;	/* The progressbar pulser id */
 };
 
-#define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=%s&tl=%s&dt=bd&dt=t&dt=at&q=%s"
+#define TRANS_URL_FMT "https://translate.google.com/translate_a/single?client=t&sl=%s&tl=%s&dt=bd&dt=t&dt=at"
 
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux i686; rv:10.0.12) Gecko/20100101 Firefox/10.0.12 Iceweasel/10.0.12"
 
@@ -705,11 +705,13 @@ translate_box(struct state *s)
 
 	/* launch the thread */
 	thr = g_thread_new("translator", translate_box_func, t);
-	g_thread_unref(thr);
+	g_thread_join(thr);
 	return;
 
 cleanup:
 	g_source_remove(timeout_id);
+	if (t)
+		t->timeout_id = 0;
 	gtk_progress_bar_set_fraction(s->prog_bar, 0.0);
 	free(t);
 }
@@ -744,8 +746,9 @@ translate_box_func(gpointer data)
 {
 	CURL			*handle;
 	struct curl_slist	*headers;
-	char			*url, *esc_buf, errbuf[CURL_ERROR_SIZE];
-	int			 len;
+	char			*url, *esc_buf, *esc_data;
+	char			 errbuf[CURL_ERROR_SIZE];
+	int			 len, str_len;
 	size_t			 i;
 	struct mem_buf		*raw_json, *translation;
 	JsonParser		*parser;
@@ -757,6 +760,7 @@ translate_box_func(gpointer data)
 	t = (struct trans_text *)data;
 	headers = NULL;
 	parser = NULL;
+	esc_data = url = NULL; /* only to shut up gcc */
 
 	raw_json = mem_buf_new();
 
@@ -767,16 +771,21 @@ translate_box_func(gpointer data)
 		goto done;
 	}
 
-	len = strlen(t->src);
-	if ((esc_buf = curl_easy_escape(handle, t->src, len)) == NULL) {
+	str_len = strlen(t->src);
+	if ((esc_buf = curl_easy_escape(handle, t->src, str_len)) == NULL) {
 		xwarn("curl_easy_escape");
 		goto done;
 	}
-	/*    URL format            - %s + user input      + \0 */
-	len = strlen(TRANS_URL_FMT) -  2 + strlen(esc_buf) + 1;
+	str_len = strlen(esc_buf);
+
+	if ((esc_data = calloc(str_len + 3, sizeof(char))) == NULL)
+		err(1, "calloc");
+	snprintf(esc_data, str_len + 3, "q=%s", esc_buf);
+
+	len = strlen(TRANS_URL_FMT) - 1;
 	if ((url = calloc(len, sizeof(char))) == NULL)
 		err(1, "calloc");
-	snprintf(url, len, TRANS_URL_FMT, t->src_lang, t->dst_lang, esc_buf);
+	snprintf(url, len, TRANS_URL_FMT, t->src_lang, t->dst_lang);
 
 	if ((headers = curl_slist_append(headers, "User-Agent: "USER_AGENT)) == NULL) {
 		xwarn("curl_slist_append");
@@ -786,17 +795,17 @@ translate_box_func(gpointer data)
 	curl_easy_setopt(handle, CURLOPT_URL, url);
 	curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, &errbuf);
-	curl_easy_setopt(handle, CURLOPT_VERBOSE, 0);
 	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, accumulate_mem_buf);
 	curl_easy_setopt(handle, CURLOPT_WRITEDATA, raw_json);
+	curl_easy_setopt(handle, CURLOPT_POST, 1);
+	curl_easy_setopt(handle, CURLOPT_POSTFIELDS, esc_data);
+	curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, str_len + 3);
+	curl_easy_setopt(handle, CURLOPT_VERBOSE, 0);
 
 	if (curl_easy_perform(handle) != 0) {
 		xwarn("curl: %s", errbuf);
 		goto done;
 	}
-
-	curl_easy_cleanup(handle);
-	curl_slist_free_all(headers);
 
 	/* parse the JSON */
 
@@ -828,12 +837,20 @@ translate_box_func(gpointer data)
 	g_idle_add(set_translation_text, t);
 
 done:
+	curl_easy_cleanup(handle);
+	curl_slist_free_all(headers);
+
+	free(url);
+	free(esc_data);
+
 	if (parser != NULL)
 		g_object_unref(parser);
 	mem_buf_free(raw_json);
+
 	if (t->timeout_id != 0)
 		g_source_remove(t->timeout_id);
 	t->timeout_id = 0;
+
 	gtk_progress_bar_set_fraction(t->prog_bar, 0.0);
 
 	return NULL;
