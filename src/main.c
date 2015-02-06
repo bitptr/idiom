@@ -106,6 +106,7 @@ static char		*read_fd(int);
 
 gpointer		 translate_box_func(gpointer);
 gboolean		 set_translation_text(gpointer);
+gboolean		 done_translation(gpointer);
 gboolean		 pulse(gpointer);
 
 __dead void		 usage();
@@ -705,7 +706,7 @@ translate_box(struct state *s)
 
 	/* launch the thread */
 	thr = g_thread_new("translator", translate_box_func, t);
-	g_thread_join(thr);
+	g_thread_unref(thr);
 	return;
 
 cleanup:
@@ -847,11 +848,7 @@ done:
 		g_object_unref(parser);
 	mem_buf_free(raw_json);
 
-	if (t->timeout_id != 0)
-		g_source_remove(t->timeout_id);
-	t->timeout_id = 0;
-
-	gtk_progress_bar_set_fraction(t->prog_bar, 0.0);
+	g_idle_add(done_translation, t);
 
 	return NULL;
 }
@@ -868,6 +865,27 @@ set_translation_text(gpointer data)
 	t = (struct trans_text *)data;
 
 	gtk_text_buffer_set_text(t->dst_g_buf, t->translation->mem, -1);
+
+	return G_SOURCE_REMOVE;
+}
+
+/*
+ * Clean up after the translation processing: turn off the progress bar, free
+ * the memory.
+ *
+ * RETURN: false, so the function is not run again.
+ */
+gboolean
+done_translation(gpointer data)
+{
+	struct trans_text	*t;
+	t = (struct trans_text *)data;
+
+	if (t->timeout_id != 0)
+		g_source_remove(t->timeout_id);
+	t->timeout_id = 0;
+	gtk_progress_bar_set_fraction(t->prog_bar, 0.0);
+
 	mem_buf_free(t->translation);
 	free(t);
 
