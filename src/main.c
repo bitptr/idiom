@@ -496,7 +496,7 @@ cleanup:
 static GtkTextBuffer *
 deactivated_text_buf(struct state *s)
 {
-	GtkTextBuffer	*text_buf;
+	GtkTextBuffer	*text_buf = NULL;
 
 	switch (s->active) {
 	case TOP_BOX:
@@ -506,7 +506,6 @@ deactivated_text_buf(struct state *s)
 		text_buf = s->top_buf;
 		break;
 	case NO_BOX:
-		text_buf = NULL;
 		break;
 	default:
 		errx(EX_SOFTWARE, "unknown src_pos");
@@ -628,7 +627,7 @@ paste_cb(GtkMenuItem *menuitem, gpointer user_data)
 static GtkTextView *
 focused_text_view(struct state *s)
 {
-	GtkTextView	*text_view;
+	GtkTextView	*text_view = NULL;
 
 	switch (s->focused) {
 	case TOP_BOX:
@@ -638,8 +637,6 @@ focused_text_view(struct state *s)
 		text_view = s->bot_view;
 		break;
 	case NO_BOX:
-		return NULL;
-		/* NOTREACHED */
 		break;
 	default:
 		errx(EX_SOFTWARE, "unknown src_pos");
@@ -658,8 +655,8 @@ translate_box(struct state *s)
 	struct trans_text	*t;
  	gchar			*src_buf;
 	GtkTextIter		 src_start, src_end;
-	GtkTextBuffer		*src_g_buf, *dst_g_buf;
-	const char		*src_lang, *dst_lang;
+	GtkTextBuffer		*src_g_buf = NULL, *dst_g_buf = NULL;
+	const char		*src_lang = NULL, *dst_lang = NULL;
 	guint			 timeout_id;
 
 	src_buf = NULL;
