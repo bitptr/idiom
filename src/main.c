@@ -967,10 +967,12 @@ mem_buf_new()
 static void
 mem_buf_free(struct mem_buf *m)
 {
-	free(m->mem);
-	m->mem = NULL;
-	m->size = 0;
-	free(m);
+	if (m) {
+		free(m->mem);
+		m->mem = NULL;
+		m->size = 0;
+		free(m);
+	}
 }
 
 /*
