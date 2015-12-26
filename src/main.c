@@ -702,6 +702,7 @@ translate_box(struct state *s)
 	t->dst_lang = dst_lang;
 	t->timeout_id = timeout_id;
 	t->prog_bar = s->prog_bar;
+	t->translation = NULL;
 
 	/* launch the thread */
 	thr = g_thread_new("translator", translate_box_func, t);
@@ -886,6 +887,7 @@ done_translation(gpointer data)
 	gtk_progress_bar_set_fraction(t->prog_bar, 0.0);
 
 	mem_buf_free(t->translation);
+	t->translation = NULL;
 	free(t);
 
 	return G_SOURCE_REMOVE;
